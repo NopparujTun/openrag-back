@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import AsyncIterator
-
 import httpx
-
-from app.core.config import settings
 
 class EngineError(RuntimeError):
     pass
@@ -13,15 +11,24 @@ class EngineError(RuntimeError):
 class LLMService:
     async def stream_response(self, prompt: str) -> AsyncIterator[str]:
         """
-        Streams raw text tokens from DeepSeek API as they arrive.
+        Streams raw text tokens from Groq API (Llama-3) as they arrive.
         """
-        url = "https://api.deepseek.com/chat/completions"
+        # 1. เปลี่ยน URL ไปที่ Groq
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        
+        # 2. ดึงคีย์จาก Env (อย่าลืมตั้งค่า GROQ_API_KEY ใน Vercel นะครับ)
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            raise EngineError("GROQ_API_KEY is not set")
+
         headers = {
-            "Authorization": f"Bearer {settings.deepseek_api_key}",
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
         }
+        
+        # 3. ปรับโมเดลเป็น Llama-3 (แรงและฟรี)
         payload = {
-            "model": "deepseek-chat", # ใช้โมเดลพื้นฐานของ DeepSeek
+            "model": "llama3-70b-8192", 
             "messages": [
                 {"role": "user", "content": prompt}
             ],
@@ -33,23 +40,19 @@ class LLMService:
                 async with client.stream("POST", url, headers=headers, json=payload) as r:
                     if r.status_code != 200:
                         error_msg = await r.aread()
-                        raise EngineError(f"DeepSeek generate failed: {r.status_code} {error_msg.decode('utf-8')}")
+                        raise EngineError(f"Groq generate failed: {r.status_code} {error_msg.decode('utf-8')}")
                     
                     async for line in r.aiter_lines():
-                        # ข้ามบรรทัดว่าง หรือบรรทัดที่ไม่ใช่ข้อมูล SSE
                         if not line or not line.startswith("data: "):
                             continue
                             
-                        # ตัดคำว่า "data: " ออก (6 ตัวอักษร) เพื่อเอาแค่ก้อน JSON
                         data_str = line[6:].strip()
                         
-                        # เช็คว่าสตรีมจบหรือยัง
                         if data_str == "[DONE]":
                             break
                             
                         try:
                             obj = json.loads(data_str)
-                            # โครงสร้างแบบ OpenAI/DeepSeek จะอยู่ที่ choices[0].delta.content
                             choices = obj.get("choices", [])
                             if choices:
                                 delta = choices[0].get("delta", {})
@@ -61,6 +64,6 @@ class LLMService:
                             continue
                             
             except httpx.RequestError as e:
-                raise EngineError("DeepSeek API is not reachable") from e
+                raise EngineError("Groq API is not reachable") from e
 
 llm_service = LLMService()
