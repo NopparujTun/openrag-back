@@ -1,15 +1,8 @@
 {
-  "rewriteConfig": {
-    "rewrites": [
-      {
-        "source": "/(.*)",
-        "destination": "api/main.py"
-      }
-    ]
-  },
-  "functions": {
-    "api/main.py": {
-      "runtime": "vercel-python@0.1.0"
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "api/main.py"
     }
-  }
+  ]
 }
