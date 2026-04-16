@@ -24,7 +24,7 @@ chardet==4.0.0
 charset-normalizer==3.4.6
 chroma-hnswlib==0.7.3
 click==8.3.2
-cloud-init==25.1.4
+
 colorama==0.4.4
 coloredlogs==15.0.1
 command-not-found==0.3
