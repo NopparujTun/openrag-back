@@ -41,24 +41,32 @@ class DocumentRepository:
         return len(res.data or [])
 
     def upload_file(self, user_id: str, bot_id: str, filename: str, data: bytes, content_type: str) -> str:
-        """
-        Uploads a file to Supabase Storage and returns the storage path.
-        """
-        storage_path = f"{user_id}/{bot_id}/{filename}"
-        try:
-            storage = self.sb.storage.from_(settings.storage_bucket)
-            storage.upload(storage_path, data, {"content-type": content_type})
-        except Exception as e:
+            """
+            Uploads a file to Supabase Storage and returns the storage path.
+            """
+            storage_path = f"{user_id}/{bot_id}/{filename}"
             try:
-                # Fallback to service role
-                svc = supabase_service()
-                svc.storage.from_(settings.storage_bucket).upload(
-                    storage_path, data, {"content-type": content_type}
+                storage = self.sb.storage.from_(settings.storage_bucket)
+                # 🚨 จุดที่ 1: เพิ่ม "x-upsert": "true"
+                storage.upload(
+                    storage_path, 
+                    data, 
+                    {"content-type": content_type, "x-upsert": "true"}
                 )
-            except Exception as inner_e:
-                raise RuntimeError("Storage upload blocked by policies") from inner_e
-                
-        return storage_path
+            except Exception as e:
+                try:
+                    # Fallback to service role
+                    svc = supabase_service()
+                    # 🚨 จุดที่ 2: เพิ่ม "x-upsert": "true" ตรงนี้ด้วยครับ
+                    svc.storage.from_(settings.storage_bucket).upload(
+                        storage_path, 
+                        data, 
+                        {"content-type": content_type, "x-upsert": "true"}
+                    )
+                except Exception as inner_e:
+                    raise RuntimeError("Storage upload blocked by policies") from inner_e
+                    
+            return storage_path
 
     def download_file(self, file_path: str) -> bytes:
         """
