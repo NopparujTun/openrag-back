@@ -12,3 +12,4 @@ pydantic-settings==2.4.0
 langchain-core>=0.2.38
 langchain-openai>=0.1.25
 langchain-text-splitters>=0.2.0
+langchain-google-genai
