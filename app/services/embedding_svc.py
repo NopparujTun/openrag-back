@@ -3,17 +3,18 @@ import httpx
 
 class EmbeddingService:
     def __init__(self):
+        # ดึง API Key จาก Environment (แนะนำให้ตั้งใน Vercel/Dotenv)
         self.api_key = os.getenv("GEMINI_API_KEY")
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY is not set in environment variables.")
             
-        # URL สำหรับเรียก API ของ Gemini ตรงๆ (ไม่ต้องง้อ SDK)
+        # URL ที่ถูกต้องสำหรับ v1beta (ไม่ต้องใส่ชื่อโมเดลใน URL)
         self.url = f"https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key={self.api_key}"
 
     async def embed_text(self, text: str) -> list[float]:
-        # จัดรูปแบบข้อมูลตามที่ Google ต้องการเป๊ะๆ พร้อมบังคับไซส์ 768
+        # Payload ที่ถูกต้อง (โมเดลต้องระบุแบบนี้)
         payload = {
-            "model": "models/text-embedding-004",
+            "model": "models/text-embedding-004", # ต้องมีคำว่า models/ นำหน้าตรงนี้
             "content": {
                 "parts": [{"text": text}]
             },
@@ -21,19 +22,19 @@ class EmbeddingService:
         }
         
         try:
-            # ใช้ httpx ยิง Request แบบ Asynchronous
             async with httpx.AsyncClient() as client:
+                # ลองยิงแบบ POST
                 response = await client.post(self.url, json=payload, timeout=30.0)
                 
-                # ถ้า API ตอบกลับว่าพัง ให้โยน Error ออกมาดู
+                if response.status_code != 200:
+                    print(f"Error Detail: {response.text}") # ดู Error จริงจาก Google
+                
                 response.raise_for_status()
                 
-                # แกะเอาเฉพาะตัวเลข Vector ออกมา
                 data = response.json()
                 return data["embedding"]["values"]
                 
         except Exception as e:
             raise RuntimeError(f"Gemini API Direct Call failed: {str(e)}")
 
-# สร้าง Instance ไว้เรียกใช้งาน
 embedding_service = EmbeddingService()
