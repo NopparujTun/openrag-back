@@ -1,28 +1,29 @@
 from __future__ import annotations
 
-import httpx
-
+import os
 from app.core.config import settings
-
-
-class OllamaEmbeddingError(RuntimeError):
-    pass
-
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 class EmbeddingService:
-    async def embed_text(self, text: str) -> list[float]:
-        url = f"{settings.ollama_base_url.rstrip('/')}/api/embeddings"
-        async with httpx.AsyncClient(timeout=30) as client:
-            try:
-                r = await client.post(url, json={"model": settings.ollama_embed_model, "prompt": text})
-            except httpx.RequestError as e:
-                raise OllamaEmbeddingError("Ollama is not reachable") from e
-        if r.status_code != 200:
-            raise OllamaEmbeddingError(f"Ollama embeddings failed: {r.status_code} {r.text}")
-        data = r.json()
-        emb = data.get("embedding")
-        if not isinstance(emb, list):
-            raise OllamaEmbeddingError("Ollama embeddings response missing embedding")
-        return emb
+    def __init__(self):
+        # ดึง API Key จาก Environment
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY is not set in environment variables.")
+            
+        # เรียกใช้ Gemini Embedding Model (เวอร์ชันล่าสุด)
+        self.embeddings = GoogleGenerativeAIEmbeddings(
+            model="models/text-embedding-004", 
+            google_api_key=api_key
+        )
 
+    async def embed_text(self, text: str) -> list[float]:
+        try:
+            # ใช้ฟังก์ชัน embed_query ของ LangChain
+            vector = self.embeddings.embed_query(text)
+            return vector
+        except Exception as e:
+            raise RuntimeError(f"Gemini Embedding failed: {str(e)}")
+
+# สร้าง Instance ไว้เรียกใช้งาน
 embedding_service = EmbeddingService()
