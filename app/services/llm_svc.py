@@ -28,7 +28,7 @@ class LLMService:
         
         # 3. ปรับโมเดลเป็น Llama-3 (แรงและฟรี)
         payload = {
-            "model": "llama3-70b-8192", 
+            "model": "qwen/qwen3-32b", 
             "messages": [
                 {"role": "user", "content": prompt}
             ],
