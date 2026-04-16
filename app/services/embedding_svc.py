@@ -1,27 +1,31 @@
-from __future__ import annotations
-
 import os
-from app.core.config import settings
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from google import genai
+from google.genai import types
 
 class EmbeddingService:
     def __init__(self):
-        # ดึง API Key จาก Environment
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
+        # 1. ดึง API Key
+        self.api_key = os.getenv("GEMINI_API_KEY")
+        if not self.api_key:
             raise ValueError("GEMINI_API_KEY is not set in environment variables.")
             
-        # เรียกใช้ Gemini Embedding Model (เวอร์ชันล่าสุด)
-        self.embeddings = GoogleGenerativeAIEmbeddings(
-            model="gemini-embedding-001", 
-            google_api_key=api_key
-        )
+        # 2. สร้าง Client ของ Google GenAI
+        self.client = genai.Client(api_key=self.api_key)
 
     async def embed_text(self, text: str) -> list[float]:
         try:
-            # ใช้ฟังก์ชัน embed_query ของ LangChain
-            vector = self.embeddings.embed_query(text)
-            return vector
+            # 3. ใช้ aio (Async IO) เพื่อไม่ให้เซิร์ฟเวอร์บล็อกการทำงาน
+            # และใช้โมเดล text-embedding-004 พร้อมบังคับไซส์ 768 ตามที่คุณนพเขียนเลยครับ
+            result = await self.client.aio.models.embed_content(
+                model="text-embedding-004",
+                contents=text,
+                config=types.EmbedContentConfig(output_dimensionality=768)
+            )
+            
+            # SDK นี้จะคืนค่ากลับมาเป็นลิสต์ของค่า embeddings
+            # เราดึง .values ออกมาส่งให้ Supabase ได้เลย
+            return result.embeddings[0].values
+            
         except Exception as e:
             raise RuntimeError(f"Gemini Embedding failed: {str(e)}")
 
