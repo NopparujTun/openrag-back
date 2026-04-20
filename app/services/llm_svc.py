@@ -1,69 +1,82 @@
+"""
+app/services/llm_svc.py
+------------------------
+LLM service — wraps the DeepSeek chat completions API.
+
+Responsibility: stream raw text tokens from the language model.
+All HTTP and JSON-parsing concerns are handled here; callers receive
+a clean async iterator of string tokens.
+"""
 from __future__ import annotations
 
 import json
-import os
 from typing import AsyncIterator
+
 import httpx
 
+from app.core.config import settings
+
+
 class EngineError(RuntimeError):
-    pass
+    """Raised when the LLM backend is unreachable or returns a non-200 response."""
+
 
 class LLMService:
-    async def stream_response(self, prompt: str) -> AsyncIterator[str]:
+    async def stream(self, prompt: str) -> AsyncIterator[str]:
         """
-        Streams raw text tokens from Groq API (Llama-3) as they arrive.
-        """
-        # 1. เปลี่ยน URL ไปที่ Groq
-        url = "https://api.groq.com/openai/v1/chat/completions"
-        
-        # 2. ดึงคีย์จาก Env (อย่าลืมตั้งค่า GROQ_API_KEY ใน Vercel นะครับ)
-        api_key = os.getenv("GROQ_API_KEY")
-        if not api_key:
-            raise EngineError("GROQ_API_KEY is not set")
+        Streams raw text tokens from the DeepSeek API.
 
+        Yields individual token strings as they arrive from the model.
+        Raises EngineError if the API is unreachable or returns an error status,
+        so callers can handle LLM failures separately from other RuntimeErrors.
+        """
+        url = "https://api.deepseek.com/chat/completions"
+        payload = {
+            "model": "deepseek-chat",
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": True,
+        }
         headers = {
-            "Authorization": f"Bearer {api_key}",
+            "Authorization": f"Bearer {settings.deepseek_api_key}",
             "Content-Type": "application/json"
         }
-        
-        # 3. ปรับโมเดลเป็น Llama-3 (แรงและฟรี)
-        payload = {
-            "model": "qwen/qwen3-32b", 
-            "messages": [
-                {"role": "user", "content": prompt}
-            ],
-            "stream": True
-        }
-        
+
         async with httpx.AsyncClient(timeout=None) as client:
             try:
-                async with client.stream("POST", url, headers=headers, json=payload) as r:
-                    if r.status_code != 200:
-                        error_msg = await r.aread()
-                        raise EngineError(f"Groq generate failed: {r.status_code} {error_msg.decode('utf-8')}")
-                    
-                    async for line in r.aiter_lines():
-                        if not line or not line.startswith("data: "):
+                async with client.stream("POST", url, json=payload, headers=headers) as response:
+                    if response.status_code != 200:
+                        error_body = await response.aread()
+                        raise EngineError(
+                            f"DeepSeek generate failed: {response.status_code} "
+                            f"{error_body.decode('utf-8')}"
+                        )
+
+                    async for line in response.aiter_lines():
+                        if not line:
                             continue
-                            
-                        data_str = line[6:].strip()
                         
-                        if data_str == "[DONE]":
+                        line = line.strip()
+                        if line.startswith("data: "):
+                            line = line[6:]
+                            
+                        if line == "[DONE]":
                             break
                             
                         try:
-                            obj = json.loads(data_str)
+                            obj = json.loads(line)
                             choices = obj.get("choices", [])
                             if choices:
                                 delta = choices[0].get("delta", {})
                                 token = delta.get("content")
-                                
-                                if isinstance(token, str) and token:
+                                if token:
                                     yield token
                         except json.JSONDecodeError:
                             continue
-                            
-            except httpx.RequestError as e:
-                raise EngineError("Groq API is not reachable") from e
+
+            except httpx.RequestError as exc:
+                raise EngineError(
+                    f"DeepSeek API is not reachable at {url}"
+                ) from exc
+
 
 llm_service = LLMService()

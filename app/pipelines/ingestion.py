@@ -1,6 +1,22 @@
+"""
+app/pipelines/ingestion.py
+--------------------------
+End-to-end document ingestion pipeline.
+
+Pipeline flow:
+  1. Fetch document metadata via DocumentRepository
+  2. Mark document as 'processing'
+  3. Extract raw text (from inline content or from Storage)
+  4. Chunk text into fixed-size overlapping segments
+  5. Embed each chunk via the embedding service
+  6. Insert chunks into the database via ChunkRepository
+  7. Mark document as 'ready' (or 'error' on failure)
+
+This pipeline is always run asynchronously in a background task
+triggered by the upload or text-knowledge endpoints.
+"""
 from __future__ import annotations
 
-from app.core.config import settings
 from app.db.supabase import supabase_service, supabase_user
 from app.repositories.chunk_repo import ChunkRepository
 from app.repositories.document_repo import DocumentRepository
@@ -12,31 +28,36 @@ from app.services.text_extract import extract_text_from_bytes
 class IngestionPipeline:
     async def process_document(self, document_id: str, user_jwt: str) -> None:
         """
-        End-to-end: fetch document -> extract -> chunk -> embed -> insert chunks -> mark ready/error.
-        """
-        sb = supabase_user(user_jwt)
-        svc = supabase_service()
-        doc_repo = DocumentRepository(sb)
-        chunk_repo = ChunkRepository(svc)
+        Processes a single document through the full ingestion pipeline.
 
-        doc_res = sb.table("documents").select("*").eq("id", document_id).limit(1).execute()
-        if not doc_res.data:
+        Uses the user-scoped client for document reads/status updates
+        (to respect RLS on documents table) and the service-role client
+        for chunk inserts (background writes bypass user-level RLS on chunks).
+        """
+        user_client = supabase_user(user_jwt)
+        service_client = supabase_service()
+
+        doc_repo = DocumentRepository(user_client)
+        chunk_repo = ChunkRepository(service_client)
+
+        doc = doc_repo.get_document_by_id(document_id)
+        if not doc:
             return
-        doc = doc_res.data[0]
 
         try:
             doc_repo.update_document_status(document_id, "processing")
 
             filename = doc["filename"]
             file_path = doc.get("file_path")
-            content = doc.get("content")
+            inline_content = doc.get("content")
 
-            if content:
-                text = content
+            if inline_content:
+                text = inline_content
             else:
                 if not file_path:
                     raise RuntimeError("Missing file_path for document")
                 blob = doc_repo.download_file(file_path)
+                # Supabase storage may return str or bytes depending on the SDK version
                 data = blob.encode("utf-8", errors="ignore") if isinstance(blob, str) else blob
                 text = extract_text_from_bytes(filename, data)
 
@@ -44,20 +65,21 @@ class IngestionPipeline:
             if not chunks:
                 raise RuntimeError("No text extracted from document")
 
-            # Insert chunks synchronously or sequentially over api
-            for idx, ch in enumerate(chunks):
-                emb = await embedding_service.embed_text(ch)
+            for chunk_index, chunk_text_content in enumerate(chunks):
+                embedding = await embedding_service.embed(chunk_text_content)
                 chunk_repo.insert_chunk(
                     document_id=document_id,
                     bot_id=doc["bot_id"],
-                    text=ch,
-                    embedding=emb,
-                    chunk_index=idx,
-                    source_filename=filename
+                    text=chunk_text_content,
+                    embedding=embedding,
+                    chunk_index=chunk_index,
+                    source_filename=filename,
                 )
 
             doc_repo.update_document_status(document_id, "ready")
-        except Exception as e:
-            doc_repo.update_document_status(document_id, "error", error=str(e))
+
+        except Exception as exc:
+            doc_repo.update_document_status(document_id, "error", error=str(exc))
+
 
 ingestion_pipeline = IngestionPipeline()

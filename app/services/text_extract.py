@@ -1,3 +1,12 @@
+"""
+app/services/text_extract.py
+-----------------------------
+Text extraction service — converts raw file bytes into clean plain text.
+
+Supports: PDF (.pdf), Word (.docx), plain text (.txt), CSV (.csv).
+All extracted text is normalized via _normalize_text to remove null bytes,
+strip trailing whitespace per line, and produce clean UTF-8 output.
+"""
 from __future__ import annotations
 
 import csv
@@ -9,31 +18,55 @@ from docx import Document as DocxDocument
 from unidecode import unidecode
 
 
-def _clean(s: str) -> str:
-    s = s.replace("\u0000", " ")
-    s = unidecode(s)
-    s = "\n".join([line.rstrip() for line in s.splitlines()])
-    return s.strip()
+def _normalize_text(raw: str) -> str:
+    """
+    Normalises raw extracted text:
+      - Removes null bytes (common in PDF extraction artefacts)
+      - Converts non-ASCII characters to ASCII equivalents via unidecode
+      - Strips trailing whitespace from each line
+      - Strips leading/trailing blank lines from the result
+    """
+    raw = raw.replace("\x00", " ")
+    raw = unidecode(raw)
+    raw = "\n".join(line.rstrip() for line in raw.splitlines())
+    return raw.strip()
 
 
 def extract_text_from_bytes(filename: str, data: bytes) -> str:
+    """
+    Extracts plain text from a file given as raw bytes.
+
+    Args:
+        filename: Original filename (used only to determine file type via extension).
+        data:     Raw file bytes.
+
+    Returns:
+        Normalised plain-text string.
+
+    Raises:
+        ValueError: If the file extension is not supported.
+    """
     ext = Path(filename).suffix.lower()
+
     if ext == ".pdf":
         with pdfplumber.open(io.BytesIO(data)) as pdf:
-            pages = []
-            for p in pdf.pages:
-                pages.append(p.extract_text() or "")
-        return _clean("\n\n".join(pages))
+            pages = [page.extract_text() or "" for page in pdf.pages]
+        return _normalize_text("\n\n".join(pages))
+
     if ext == ".docx":
         doc = DocxDocument(io.BytesIO(data))
-        return _clean("\n".join([p.text for p in doc.paragraphs]))
-    if ext in (".txt",):
-        return _clean(data.decode("utf-8", errors="ignore"))
-    if ext in (".csv",):
-        # Flatten CSV rows to text for embedding
+        return _normalize_text("\n".join(p.text for p in doc.paragraphs))
+
+    if ext == ".txt":
+        return _normalize_text(data.decode("utf-8", errors="ignore"))
+
+    if ext == ".csv":
         text = data.decode("utf-8", errors="ignore")
         reader = csv.reader(io.StringIO(text))
-        rows = [" | ".join([c.strip() for c in row if c is not None]) for row in reader]
-        return _clean("\n".join([r for r in rows if r.strip()]))
-    raise ValueError(f"Unsupported file type: {ext}")
+        rows = [
+            " | ".join(cell.strip() for cell in row if cell is not None)
+            for row in reader
+        ]
+        return _normalize_text("\n".join(r for r in rows if r.strip()))
 
+    raise ValueError(f"Unsupported file type: {ext}")

@@ -20,7 +20,7 @@ class Settings:
     ollama_llm_model: str
     ollama_embed_model: str
 
-    frontend_origin: str
+    frontend_url: str
     storage_bucket: str
 
     deepseek_api_key: str
@@ -40,7 +40,7 @@ settings = Settings(
     ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
     ollama_llm_model=os.getenv("OLLAMA_LLM_MODEL", "llama3"),
     ollama_embed_model=os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
-    frontend_origin=os.getenv("FRONTEND_ORIGIN", "http://localhost:5173"),
+    frontend_url=os.getenv("FRONTEND_URL", os.getenv("FRONTEND_ORIGIN", "http://localhost:8080")),
     storage_bucket=os.getenv("SUPABASE_STORAGE_BUCKET", "documents"),
     deepseek_api_key=_required("DEEPSEEK_API_KEY"),
 )

@@ -1,31 +1,55 @@
-import os
+"""
+app/services/embedding_svc.py
+------------------------------
+Embedding service — wraps the local Ollama embeddings API.
+
+Responsibility: convert a text string into a float vector using the
+configured embedding model. All HTTP concerns (retry, timeout, error
+wrapping) are handled here so callers stay decoupled from transport details.
+"""
+from __future__ import annotations
+
 import httpx
 
-class EmbeddingService:
-    def __init__(self):
-        self.api_key = os.getenv("VOYAGE_API_KEY")
-        self.url = "https://api.voyageai.com/v1/embeddings"
+from app.core.config import settings
 
-    async def embed_text(self, text: str) -> list[float]:
-        payload = {
-            "model": "voyage-3", # ตัวใหม่ล่าสุด เสถียรและเก่งมาก
-            "input": text
-        }
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
-        
+
+class EmbeddingService:
+    def __init__(self) -> None:
+        self.base_url = settings.ollama_base_url
+        self.model = settings.ollama_embed_model
+
+    async def embed(self, text: str) -> list[float]:
+        """
+        Embeds a text string via the local Ollama instance.
+
+        Returns a list of floats representing the embedding vector.
+        Raises RuntimeError on any transport or API error so callers
+        can handle it uniformly without catching httpx internals.
+        """
+        payload = {"model": self.model, "prompt": text}
+
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.post(self.url, json=payload, headers=headers, timeout=30.0)
+                response = await client.post(
+                    f"{self.base_url.rstrip('/')}/api/embeddings",
+                    json=payload,
+                    timeout=60.0,
+                )
                 response.raise_for_status()
-                
+
                 data = response.json()
-                # Voyage คืนค่ากลับมาใน data['data'][0]['embedding']
-                return data["data"][0]["embedding"]
-                
-        except Exception as e:
-            raise RuntimeError(f"Voyage API failed: {str(e)}")
+                if "embedding" not in data:
+                    raise RuntimeError(
+                        f"Ollama response missing 'embedding' field: {data}"
+                    )
+
+                return data["embedding"]
+
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            raise RuntimeError(f"Ollama embedding failed: {exc}") from exc
+
 
 embedding_service = EmbeddingService()
