@@ -13,21 +13,19 @@ import csv
 import io
 from pathlib import Path
 
-import pdfplumber
+import fitz  # PyMuPDF
+from pythainlp.util import normalize as thai_normalize
 from docx import Document as DocxDocument
-from unidecode import unidecode
 
 
 def _normalize_text(raw: str) -> str:
     """
     Normalises raw extracted text:
       - Removes null bytes (common in PDF extraction artefacts)
-      - Converts non-ASCII characters to ASCII equivalents via unidecode
       - Strips trailing whitespace from each line
       - Strips leading/trailing blank lines from the result
     """
     raw = raw.replace("\x00", " ")
-    raw = unidecode(raw)
     raw = "\n".join(line.rstrip() for line in raw.splitlines())
     return raw.strip()
 
@@ -49,8 +47,15 @@ def extract_text_from_bytes(filename: str, data: bytes) -> str:
     ext = Path(filename).suffix.lower()
 
     if ext == ".pdf":
-        with pdfplumber.open(io.BytesIO(data)) as pdf:
-            pages = [page.extract_text() or "" for page in pdf.pages]
+        doc = fitz.open(stream=data, filetype="pdf")
+        pages = []
+        for page in doc:
+            # Using 'blocks' with sort=True helps maintain logical reading order
+            blocks = page.get_text("blocks", sort=True)
+            page_text = "\n".join(b[4] for b in blocks if len(b) > 4)
+            # Normalize Thai characters to fix floating vowels and tone marks, and remove zero-width spaces
+            normalized_page = thai_normalize(page_text).replace('\u200b', '')
+            pages.append(normalized_page)
         return _normalize_text("\n\n".join(pages))
 
     if ext == ".docx":

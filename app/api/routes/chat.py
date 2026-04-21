@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.api.dependencies import get_bot_service
+from app.api.dependencies import get_bot_service, get_bot_service_public
 from app.db.supabase import supabase_service
 from app.middleware.auth import AuthUser, get_current_user
 from app.services.bot_service import BotService
@@ -27,8 +27,13 @@ from app.services.chat_engine import chat_engine
 router = APIRouter(prefix="/bots/{bot_id}", tags=["chat"])
 
 
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
 class ChatIn(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
+    history: list[ChatMessage] = Field(default_factory=list)
 
 
 def _format_sse(data: dict) -> str:
@@ -62,6 +67,7 @@ async def chat(
         bot_id=bot_id,
         user_jwt=req.state.user_jwt,
         message=payload.message,
+        history=[h.model_dump() for h in payload.history],
         instructions=bot.get("instructions") or "",
     )
 
@@ -69,14 +75,16 @@ async def chat(
 
 
 @router.post("/chat/public")
-async def chat_public(bot_id: str, payload: ChatIn) -> StreamingResponse:
+async def chat_public(
+    bot_id: str,
+    payload: ChatIn,
+    service: BotService = Depends(get_bot_service_public),
+) -> StreamingResponse:
     """
     Public chat endpoint (no authentication required).
     Only works for bots with is_public=True.
-    Uses the service client to bypass user-level RLS.
+    Uses the service client via the dependency to bypass user-level RLS.
     """
-    service = BotService(BotRepository(supabase_service()))
-
     bot = service.get_bot_public(bot_id)
     if not bot or not bot.get("is_public"):
         raise HTTPException(status_code=404, detail="Bot not found or not public")
@@ -84,6 +92,7 @@ async def chat_public(bot_id: str, payload: ChatIn) -> StreamingResponse:
     stream = chat_engine.execute_rag_stream_public(
         bot_id=bot_id,
         message=payload.message,
+        history=[h.model_dump() for h in payload.history],
         instructions=bot.get("instructions") or "",
     )
 

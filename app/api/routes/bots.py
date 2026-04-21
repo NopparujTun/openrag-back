@@ -10,19 +10,31 @@ import json
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
-from app.api.dependencies import get_bot_service
+from app.api.dependencies import get_bot_service, get_bot_service_public
 from app.core.config import settings
 from app.middleware.auth import AuthUser, get_current_user
 from app.services.bot_service import BotService
-from app.schemas.bots import BotCreate, BotOut, BotUpdate
+from app.schemas.bots import BotCreate, BotOut, BotUpdate, BotOutPublic
 
 router = APIRouter(prefix="/bots", tags=["bots"])
 
 
 # =====================================================================
-# PUBLIC ENDPOINT: Widget clients fetch bot config from this route.
+# PUBLIC ENDPOINTS: Widget clients fetch bot config from these routes.
 # No authentication required — intentionally public.
 # =====================================================================
+
+@router.get("/{bot_id}/public", response_model=BotOutPublic)
+def get_bot_public(
+    bot_id: str,
+    service: BotService = Depends(get_bot_service_public),
+) -> dict:
+    """Returns public metadata for a bot. No auth required."""
+    bot = service.get_bot_public(bot_id)
+    if not bot or not bot.get("is_public"):
+        raise HTTPException(status_code=404, detail="Bot not found or not public")
+    return bot
+
 
 @router.get("/{bot_id}.js")
 def get_bot_widget_script(bot_id: str) -> Response:
@@ -30,28 +42,62 @@ def get_bot_widget_script(bot_id: str) -> Response:
     Returns a self-initialising JavaScript snippet that bootstraps the
     YourBot chat widget on any third-party page.
     """
-    bot_config = {
-        "botId": bot_id,
-        "name": "AI Support Assistant",
-        "themeColor": "#3b82f6",
-        "apiUrl": settings.frontend_url,
-    }
-
-    config_json = json.dumps(bot_config)
-
+    frontend_url = settings.frontend_url.rstrip("/")
+    
     js_content = f"""
     (function() {{
-        const initBot = () => {{
-            if (window.YourBot && typeof window.YourBot.init === 'function') {{
-                window.YourBot.init({config_json});
-            }} else {{
-                setTimeout(initBot, 100);
-            }}
+        const botId = "{bot_id}";
+        const frontendUrl = "{frontend_url}";
+        
+        const createWidget = () => {{
+            // Create bubble
+            const bubble = document.createElement('div');
+            bubble.id = 'yourbot-bubble';
+            bubble.style.cssText = 'position: fixed; bottom: 20px; right: 20px; width: 60px; height: 60px; border-radius: 30px; background-color: #3b82f6; box-shadow: 0 4px 12px rgba(0,0,0,0.15); cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 999999; transition: transform 0.2s ease;';
+            bubble.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            `;
+            document.body.appendChild(bubble);
+
+            // Create iframe container
+            const container = document.createElement('div');
+            container.id = 'yourbot-container';
+            container.style.display = 'none';
+            container.style.position = 'fixed';
+            container.style.bottom = '90px';
+            container.style.right = '20px';
+            container.style.width = '400px';
+            container.style.height = '600px';
+            container.style.maxHeight = 'calc(100vh - 110px)';
+            container.style.maxWidth = 'calc(100vw - 40px)';
+            container.style.borderRadius = '12px';
+            container.style.boxShadow = '0 8px 32px rgba(0,0,0,0.15)';
+            container.style.zIndex = '999999';
+            container.style.overflow = 'hidden';
+            container.style.backgroundColor = 'white';
+            
+            const iframe = document.createElement('iframe');
+            iframe.src = `${{frontendUrl}}/bots/${{botId}}/chat/public`;
+            iframe.style.width = '100%';
+            iframe.style.height = '100%';
+            iframe.style.border = 'none';
+            
+            container.appendChild(iframe);
+            document.body.appendChild(container);
+
+            // Toggle logic
+            let isOpen = false;
+            bubble.addEventListener('click', () => {{
+                isOpen = !isOpen;
+                container.style.display = isOpen ? 'block' : 'none';
+                bubble.style.transform = isOpen ? 'rotate(90deg)' : 'rotate(0deg)';
+            }});
         }};
+
         if (document.readyState === 'complete') {{
-            initBot();
+            createWidget();
         }} else {{
-            window.addEventListener('load', initBot);
+            window.addEventListener('load', createWidget);
         }}
     }})();
     """

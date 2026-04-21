@@ -22,7 +22,32 @@ class EngineError(RuntimeError):
 
 
 class LLMService:
-    async def stream(self, prompt: str) -> AsyncIterator[str]:
+    async def generate(self, messages: list[dict[str, str]]) -> str:
+        """
+        Non-streaming text generation from the DeepSeek API.
+        Used for fast internal tasks like query rewriting or keyword extraction.
+        """
+        url = "https://api.deepseek.com/chat/completions"
+        payload = {
+            "model": "deepseek-chat",
+            "messages": messages,
+            "stream": False,
+        }
+        headers = {
+            "Authorization": f"Bearer {settings.deepseek_api_key}",
+            "Content-Type": "application/json"
+        }
+        async with httpx.AsyncClient(timeout=None) as client:
+            try:
+                response = await client.post(url, json=payload, headers=headers)
+                if response.status_code != 200:
+                    raise EngineError(f"DeepSeek generate failed: {response.status_code} {response.text}")
+                obj = response.json()
+                return obj["choices"][0]["message"]["content"]
+            except httpx.RequestError as exc:
+                raise EngineError(f"DeepSeek API is not reachable at {url}") from exc
+
+    async def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[str]:
         """
         Streams raw text tokens from the DeepSeek API.
 
@@ -33,7 +58,7 @@ class LLMService:
         url = "https://api.deepseek.com/chat/completions"
         payload = {
             "model": "deepseek-chat",
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": messages,
             "stream": True,
         }
         headers = {

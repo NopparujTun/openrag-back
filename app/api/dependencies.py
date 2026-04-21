@@ -1,6 +1,6 @@
 from __future__ import annotations
 from fastapi import Depends, Request
-from app.db.supabase import supabase_user
+from app.db.supabase import supabase_user, supabase_service
 from app.middleware.auth import AuthUser, get_current_user
 from app.repositories.bot_repo import BotRepository
 from app.repositories.document_repo import DocumentRepository
@@ -17,6 +17,9 @@ def get_doc_repo(req: Request, user: AuthUser = Depends(get_current_user)) -> Do
 
 def get_bot_service(repo: BotRepository = Depends(get_bot_repo)) -> BotService:
     return BotService(repo)
+
+def get_bot_service_public() -> BotService:
+    return BotService(BotRepository(supabase_service()))
 
 def get_document_service(repo: DocumentRepository = Depends(get_doc_repo)) -> DocumentService:
     return DocumentService(repo)

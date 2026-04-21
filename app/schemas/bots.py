@@ -22,3 +22,9 @@ class BotOut(BaseModel):
     created_at: str | None = None
     updated_at: str | None = None
 
+
+class BotOutPublic(BaseModel):
+    id: str
+    name: str
+    is_public: bool
+

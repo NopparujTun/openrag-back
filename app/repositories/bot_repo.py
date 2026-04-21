@@ -33,7 +33,7 @@ class BotRepository:
         return res.data[0] if res.data else None
 
     def get_bot_public(self, bot_id: str) -> dict[str, Any] | None:
-        res = self.sb.table("bots").select("id,instructions,is_public").eq("id", bot_id).limit(1).execute()
+        res = self.sb.table("bots").select("id,name,instructions,is_public").eq("id", bot_id).limit(1).execute()
         return res.data[0] if res.data else None
 
     def update_bot(self, bot_id: str, user_id: str, patch: dict[str, Any]) -> dict[str, Any] | None:
