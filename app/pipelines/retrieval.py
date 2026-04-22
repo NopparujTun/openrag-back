@@ -22,15 +22,8 @@ from typing import Any
 
 from app.db.supabase import supabase_service, supabase_user
 from app.repositories.chunk_repo import ChunkRepository
-from app.services.embedding_svc import embedding_service
-
-
-@dataclass(frozen=False)
-class RetrievedChunk:
-    """A single chunk returned by the vector similarity search."""
-    filename: str
-    text: str
-    score: float | None = None
+from app.services.embedding_service import embedding_service
+from app.models.retrieval import RetrievedChunk
 
 
 class RetrievalPipeline:

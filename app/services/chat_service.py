@@ -1,7 +1,7 @@
 """
-app/services/chat_engine.py
+app/services/chat_service.py
 -----------------------------
-Chat engine — orchestrates RAG retrieval and LLM streaming.
+Chat service — orchestrates RAG retrieval and LLM streaming.
 
 This service sits between the HTTP layer (routes) and the AI pipeline
 (retrieval + LLM). It:
@@ -19,7 +19,7 @@ from __future__ import annotations
 from typing import AsyncIterator
 
 from app.pipelines.retrieval import retrieval_pipeline
-from app.services.llm_svc import EngineError, llm_service
+from app.services.llm_service import EngineError, llm_service
 
 
 class ChatEngine:

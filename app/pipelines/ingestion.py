@@ -20,9 +20,9 @@ from __future__ import annotations
 from app.db.supabase import supabase_service, supabase_user
 from app.repositories.chunk_repo import ChunkRepository
 from app.repositories.document_repo import DocumentRepository
-from app.services.chunking import chunk_text
-from app.services.embedding_svc import embedding_service
-from app.services.text_extract import extract_text_from_bytes
+from app.services.chunking_service import chunking_service
+from app.services.embedding_service import embedding_service
+from app.services.text_extraction_service import text_extraction_service
 
 
 class IngestionPipeline:
@@ -59,9 +59,9 @@ class IngestionPipeline:
                 blob = doc_repo.download_file(file_path)
                 # Supabase storage may return str or bytes depending on the SDK version
                 data = blob.encode("utf-8", errors="ignore") if isinstance(blob, str) else blob
-                text = extract_text_from_bytes(filename, data)
+                text = text_extraction_service.extract_text(filename, data)
 
-            chunks = chunk_text(text)
+            chunks = chunking_service.chunk_text(text)
             if not chunks:
                 raise RuntimeError("No text extracted from document")
 

@@ -6,6 +6,11 @@ class DocumentService:
     def __init__(self, repo: DocumentRepository):
         self.repo = repo
 
+    def validate_filename(self, filename: str) -> bool:
+        """Validates if the filename has an allowed extension."""
+        from app.utils.file_helpers import is_allowed_file
+        return is_allowed_file(filename)
+
     def list_documents(self, bot_id: str) -> list[dict[str, Any]]:
         return self.repo.list_documents(bot_id)
 

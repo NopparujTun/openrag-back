@@ -7,7 +7,18 @@ class BotService:
         self.repo = repo
 
     def list_bots_for_user(self, user_id: str) -> list[dict[str, Any]]:
-        return self.repo.list_bots_for_user(user_id)
+        bots = self.repo.list_bots_for_user(user_id)
+        result = []
+        for bot in bots:
+            doc_count = 0
+            docs = bot.get("documents")
+            if isinstance(docs, list) and docs and isinstance(docs[0], dict):
+                doc_count = docs[0].get("count") or 0
+            # Remove the 'documents' key to keep the output clean and add document_count
+            bot_data = {k: v for k, v in bot.items() if k != "documents"}
+            bot_data["document_count"] = doc_count
+            result.append(bot_data)
+        return result
 
     def create_bot(self, user_id: str, name: str, instructions: str = "", is_public: bool = False) -> dict[str, Any] | None:
         return self.repo.create_bot(user_id, name, instructions, is_public)

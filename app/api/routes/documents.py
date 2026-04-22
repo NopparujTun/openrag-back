@@ -17,8 +17,6 @@ from app.schemas.documents import DocumentOut, TextKnowledgeIn
 
 router = APIRouter(prefix="/bots/{bot_id}/documents", tags=["documents"])
 
-ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt", ".csv"}
-
 
 @router.get("", response_model=list[DocumentOut])
 def list_documents(
@@ -67,9 +65,8 @@ async def upload_document(
     status='pending' and processed asynchronously in the background.
     """
     filename = file.filename or "upload"
-    extension = "." + filename.split(".")[-1].lower() if "." in filename else ""
 
-    if extension not in ALLOWED_EXTENSIONS:
+    if not service.validate_filename(filename):
         raise HTTPException(status_code=400, detail="Unsupported file type")
 
     data = await file.read()

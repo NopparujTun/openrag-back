@@ -1,5 +1,5 @@
 """
-app/services/embedding_svc.py
+app/services/embedding_service.py
 ------------------------------
 Embedding service — wraps the local Ollama embeddings API.
 

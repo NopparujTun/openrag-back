@@ -1,5 +1,5 @@
 import asyncio
-from app.services.llm_svc import llm_service
+from app.services.llm_service import llm_service
 
 async def main():
     try:

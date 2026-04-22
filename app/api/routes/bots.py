@@ -115,15 +115,7 @@ def list_bots(
     service: BotService = Depends(get_bot_service),
 ) -> list[dict]:
     """Returns all bots owned by the authenticated user, with document counts."""
-    bots = service.list_bots_for_user(user.user_id)
-    result = []
-    for bot in bots:
-        doc_count = 0
-        docs = bot.get("documents")
-        if isinstance(docs, list) and docs and isinstance(docs[0], dict):
-            doc_count = docs[0].get("count") or 0
-        result.append({**bot, "document_count": doc_count})
-    return result
+    return service.list_bots_for_user(user.user_id)
 
 
 @router.post("", response_model=BotOut)

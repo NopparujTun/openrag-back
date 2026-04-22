@@ -21,7 +21,8 @@ from app.api.dependencies import get_bot_service, get_bot_service_public
 from app.db.supabase import supabase_service
 from app.middleware.auth import AuthUser, get_current_user
 from app.services.bot_service import BotService
-from app.services.chat_engine import chat_engine
+from app.services.chat_service import chat_engine
+from app.utils.sse import stream_as_sse
 
 
 router = APIRouter(prefix="/bots/{bot_id}", tags=["chat"])
@@ -34,17 +35,6 @@ class ChatMessage(BaseModel):
 class ChatIn(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     history: list[ChatMessage] = Field(default_factory=list)
-
-
-def _format_sse(data: dict) -> str:
-    """Formats a dict as a Server-Sent Events data line."""
-    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
-
-
-async def _stream_as_sse(stream: AsyncGenerator) -> AsyncGenerator[str, None]:
-    """Wraps an async generator of dicts into SSE-formatted strings."""
-    async for item in stream:
-        yield _format_sse(item)
 
 
 @router.post("/chat")
@@ -71,7 +61,7 @@ async def chat(
         instructions=bot.get("instructions") or "",
     )
 
-    return StreamingResponse(_stream_as_sse(stream), media_type="text/event-stream")
+    return StreamingResponse(stream_as_sse(stream), media_type="text/event-stream")
 
 
 @router.post("/chat/public")
@@ -96,4 +86,4 @@ async def chat_public(
         instructions=bot.get("instructions") or "",
     )
 
-    return StreamingResponse(_stream_as_sse(stream), media_type="text/event-stream")
+    return StreamingResponse(stream_as_sse(stream), media_type="text/event-stream")
